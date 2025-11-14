@@ -3,6 +3,7 @@ package kitjwt
 import (
     "crypto"
     "crypto/ed25519"
+    "crypto/rand"
     "encoding/hex"
     "errors"
     "fmt"
@@ -119,4 +120,13 @@ func Get(keyHex string) (JWT, error) {
         instance = impl
     })
     return instance, initErr
+}
+
+// GenerateKey 生成一个新的 ed25519 私钥，并以十六进制字符串形式返回
+func GenerateKey() (string, error) {
+    _, privateKey, err := ed25519.GenerateKey(rand.Reader)
+    if err != nil {
+        return "", err
+    }
+    return hex.EncodeToString(privateKey.Seed()), nil
 }
