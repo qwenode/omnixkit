@@ -110,16 +110,23 @@ var (
     initErr  error
 )
 
-// Get 获取 JWT 实例（单例模式）
-// keyHex: 十六进制编码的 ed25519 密钥（64字节，即128个十六进制字符）
-// 第一次调用时会使用 keyHex 初始化实例，后续调用会直接返回已初始化的实例
-func Get(keyHex string) (JWT, error) {
+func Bootstrap(keyHex string) error {
     once.Do(func() {
         var impl *jwtImpl
         impl, initErr = create(keyHex)
         instance = impl
     })
-    return instance, initErr
+    return initErr
+}
+
+// Get 获取 JWT 实例（单例模式）
+// keyHex: 十六进制编码的 ed25519 密钥（64字节，即128个十六进制字符）
+// 第一次调用时会使用 keyHex 初始化实例，后续调用会直接返回已初始化的实例
+func Get() JWT {
+    if instance == nil {
+        panic("JWT instance not initialized. Call Bootstrap(keyHex) first.")
+    }
+    return instance
 }
 
 // GenerateKey 生成一个新的 ed25519 私钥，并以十六进制字符串形式返回
