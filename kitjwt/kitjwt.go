@@ -7,6 +7,7 @@ import (
     "encoding/hex"
     "errors"
     "fmt"
+    "strings"
     "sync"
 
     "github.com/golang-jwt/jwt/v5"
@@ -81,8 +82,12 @@ func (j *jwtImpl) Sign(claims jwt.Claims) (string, error) {
 //   claims := &MyClaims{}
 //   err := jwt.Parse(claims, token, jwt.WithExpirationRequired())
 func (j *jwtImpl) Parse(claims jwt.Claims, token string, opts ...jwt.ParserOption) error {
+    if len(token) < 7 || !strings.EqualFold(token[:7], "bearer ") {
+        return errInvalidToken
+    }
+
     parsed, err := jwt.ParseWithClaims(
-        token,
+        token[7:],
         claims,
         func(token *jwt.Token) (interface{}, error) {
             if _, ok := token.Method.(*jwt.SigningMethodEd25519); !ok {
@@ -111,6 +116,9 @@ var (
 )
 
 func Bootstrap(keyHex string) error {
+    if instance != nil {
+        panic("JWT instance already initialized")
+    }
     once.Do(func() {
         var impl *jwtImpl
         impl, initErr = create(keyHex)
