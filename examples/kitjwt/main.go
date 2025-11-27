@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/qwenode/omnixkit/kitctx"
 	"github.com/qwenode/omnixkit/kitjwt"
 )
 
@@ -74,11 +75,15 @@ func main() {
 
 	// 需要认证的路由组
 	auth := r.Group("/api")
-	auth.Use(kitjwt.NewAuthMiddleware[*JwtAdminClaims]())
+	auth.Use(kitctx.NewAuthMiddleware[*JwtAdminClaims]())
 	{
 		auth.GET("/profile", func(c *gin.Context) {
-			// 从 context 获取 getClaims
-			getClaims := kitjwt.GetClaims[*JwtAdminClaims](c)
+			// 从 context 获取 claims
+			getClaims, err := kitctx.GetClaims[*JwtAdminClaims](c)
+			if err != nil {
+				c.JSON(401, gin.H{"error": "unauthorized"})
+				return
+			}
 			c.JSON(200, gin.H{
 				"user_id":  getClaims.UserID,
 				"username": getClaims.Username,
