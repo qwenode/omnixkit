@@ -31,61 +31,63 @@ func IsUnexpectedSigningMethod(err error) bool {
 }
 
 // JWT 是一个通用的 JWT 工具接口，支持 ed25519 签名算法
-type JWT interface {
+type JWT[T jwt.Claims] interface {
     // Sign 对 claims 进行签名，返回 JWT token 字符串
-    Sign(claims jwt.Claims) (string, error)
+    Sign(claims T) (string, error)
     // Parse 解析并验证 JWT token，返回 Claims
-    // claims 必须是实现了 jwt.Claims 接口的类型指针
     // opts 可选的解析选项，如 jwt.WithExpirationRequired(), jwt.WithLeeway() 等
-    Parse(claims jwt.Claims, token string, opts ...jwt.ParserOption) error
+    Parse(token string, opts ...jwt.ParserOption) (T, error)
 }
 
 // jwtImpl 是一个通用的 JWT 工具实现，支持 ed25519 签名算法
-type jwtImpl struct {
+type jwtImpl[T jwt.Claims] struct {
     key       ed25519.PrivateKey
     publicKey crypto.PublicKey
     algorithm jwt.SigningMethod
+    newClaims func() T // 用于创建新的 claims 实例
 }
 
 // create 创建一个新的 JWT 实例
-// keyHex: 十六进制编码的 ed25519 密钥（64字节，即128个十六进制字符）
-func create(keyHex string) (*jwtImpl, error) {
+// keyHex: 十六进制编码的 ed25519 私钥（64字节，即128个十六进制字符）
+// newClaims: 用于创建新的 claims 实例的函数
+func create[T jwt.Claims](keyHex string, newClaims func() T) (*jwtImpl[T], error) {
     bytes, err := hex.DecodeString(keyHex)
     if err != nil {
         return nil, fmt.Errorf("failed to decode jwt key: %w", err)
     }
-    if len(bytes) != ed25519.SignatureSize {
-        return nil, fmt.Errorf("jwt key length incorrect: expected %d bytes, got %d", ed25519.SignatureSize, len(bytes))
+    if len(bytes) != ed25519.PrivateKeySize {
+        return nil, fmt.Errorf("jwt key length incorrect: expected %d bytes, got %d", ed25519.PrivateKeySize, len(bytes))
     }
 
-    privateKey := ed25519.NewKeyFromSeed(bytes[:ed25519.SeedSize])
-    return &jwtImpl{
+    privateKey := ed25519.PrivateKey(bytes)
+    return &jwtImpl[T]{
         key:       privateKey,
         publicKey: privateKey.Public(),
         algorithm: jwt.SigningMethodEdDSA,
+        newClaims: newClaims,
     }, nil
 }
 
 // Sign 对 claims 进行签名，返回 JWT token 字符串
-func (j *jwtImpl) Sign(claims jwt.Claims) (string, error) {
+func (j *jwtImpl[T]) Sign(claims T) (string, error) {
     token := jwt.NewWithClaims(j.algorithm, claims)
     return token.SignedString(j.key)
 }
 
 // Parse 解析并验证 JWT token，返回 Claims
-// claims 必须是实现了 jwt.Claims 接口的类型指针
 // opts 可选的解析选项，如 jwt.WithExpirationRequired(), jwt.WithLeeway() 等
-// 示例: 
-//   var claims MyClaims
-//   err := jwt.Parse(&claims, token)
-//   或
-//   claims := &MyClaims{}
-//   err := jwt.Parse(claims, token, jwt.WithExpirationRequired())
-func (j *jwtImpl) Parse(claims jwt.Claims, token string, opts ...jwt.ParserOption) error {
+// 示例:
+//
+//	claims, err := jwt.Parse(token)
+//	或
+//	claims, err := jwt.Parse(token, jwt.WithExpirationRequired())
+func (j *jwtImpl[T]) Parse(token string, opts ...jwt.ParserOption) (T, error) {
+    var zero T
     if len(token) < 7 || !strings.EqualFold(token[:7], "bearer ") {
-        return errInvalidToken
+        return zero, errInvalidToken
     }
 
+    claims := j.newClaims()
     parsed, err := jwt.ParseWithClaims(
         token[7:],
         claims,
@@ -99,42 +101,52 @@ func (j *jwtImpl) Parse(claims jwt.Claims, token string, opts ...jwt.ParserOptio
     )
 
     if err != nil {
-        return errInvalidToken
+        return zero, errInvalidToken
     }
 
     if !parsed.Valid {
-        return errInvalidToken
+        return zero, errInvalidToken
     }
 
-    return nil
+    return claims, nil
 }
 
 var (
-    instance JWT
+    instance any
     once     sync.Once
     initErr  error
 )
 
-func Bootstrap(keyHex string) error {
+// Bootstrap 初始化 JWT 实例（泛型版本）
+// keyHex: 十六进制编码的 ed25519 私钥（64字节，即128个十六进制字符）
+// newClaims: 用于创建新的 claims 实例的函数
+// 示例:
+//
+//	kitjwt.Bootstrap("your-key-hex", func() *types.JwtAdminClaims {
+//	    return &types.JwtAdminClaims{}
+//	})
+func Bootstrap[T jwt.Claims](keyHex string, newClaims func() T) error {
     if instance != nil {
         panic("JWT instance already initialized")
     }
     once.Do(func() {
-        var impl *jwtImpl
-        impl, initErr = create(keyHex)
+        var impl *jwtImpl[T]
+        impl, initErr = create(keyHex, newClaims)
         instance = impl
     })
     return initErr
 }
 
 // Get 获取 JWT 实例（单例模式）
-// keyHex: 十六进制编码的 ed25519 密钥（64字节，即128个十六进制字符）
-// 第一次调用时会使用 keyHex 初始化实例，后续调用会直接返回已初始化的实例
-func Get() JWT {
+// 必须先调用 Bootstrap 初始化
+// 示例:
+//
+//	claims, err := kitjwt.Get[*types.JwtAdminClaims]().Parse(token, jwt.WithExpirationRequired())
+func Get[T jwt.Claims]() JWT[T] {
     if instance == nil {
-        panic("JWT instance not initialized. Call Bootstrap(keyHex) first.")
+        panic("JWT instance not initialized. Call Bootstrap(keyHex, newClaims) first.")
     }
-    return instance
+    return instance.(JWT[T])
 }
 
 // GenerateKey 生成一个新的 ed25519 私钥，并以十六进制字符串形式返回
@@ -143,5 +155,5 @@ func GenerateKey() (string, error) {
     if err != nil {
         return "", err
     }
-    return hex.EncodeToString(privateKey.Seed()), nil
+    return hex.EncodeToString(privateKey), nil
 }
