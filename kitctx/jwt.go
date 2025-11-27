@@ -11,11 +11,11 @@ import (
 
 const ginJwtClaimsKey = "_omnixkit_jwt"
 
-// NewAuthMiddleware 创建 JWT 认证中间件
+// GinMiddlewareJwtAuth 创建 JWT 认证中间件
 // 示例:
 //
-//	router.Use(kitctx.NewAuthMiddleware[*types.JwtAdminClaims]())
-func NewAuthMiddleware[T jwt.Claims]() gin.HandlerFunc {
+//	router.Use(kitctx.GinMiddlewareJwtAuth[*types.JwtAdminClaims]())
+func GinMiddlewareJwtAuth[T jwt.Claims]() gin.HandlerFunc {
     return func(c *gin.Context) {
         tokenHeader := c.GetHeader("Authorization")
         claims, err := kitjwt.Get[T]().Parse(tokenHeader, jwt.WithExpirationRequired())

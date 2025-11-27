@@ -75,7 +75,7 @@ func main() {
 
 	// 需要认证的路由组
 	auth := r.Group("/api")
-	auth.Use(kitctx.NewAuthMiddleware[*JwtAdminClaims]())
+	auth.Use(kitctx.GinMiddlewareJwtAuth[*JwtAdminClaims]())
 	{
 		auth.GET("/profile", func(c *gin.Context) {
 			// 从 context 获取 claims
