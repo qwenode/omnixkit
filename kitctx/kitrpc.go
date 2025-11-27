@@ -1,4 +1,4 @@
-package kitrpc
+package kitctx
 
 import (
     "errors"

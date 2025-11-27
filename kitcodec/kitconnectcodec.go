@@ -1,4 +1,4 @@
-package kitconnectcodec
+package kitcodec
 
 import (
     "bytes"

@@ -1,4 +1,4 @@
-package kitrpc
+package kitctx
 
 import (
     "bytes"
@@ -16,7 +16,7 @@ import (
 const ginContextKey = "_omnixkit_context"
 
 // 让rpc能够访问gin的上下文, 需要在gin的中间件里使用这个中间件
-func MiddlewareAdapterGinContext() gin.HandlerFunc {
+func GinMiddlewareAdapterContext() gin.HandlerFunc {
     return func(c *gin.Context) {
         ctx := context.WithValue(c.Request.Context(), ginContextKey, c)
         c.Request = c.Request.WithContext(ctx)
@@ -45,7 +45,7 @@ func GetClientIp(c context.Context) string {
 }
 
 // 从允许的Header列表中设置客户端IP到Context
-func MiddlewareSetClientIp(allowHeaders []string) gin.HandlerFunc {
+func GinMiddlewareSetClientIp(allowHeaders []string) gin.HandlerFunc {
     return func(c *gin.Context) {
         clientIP := ""
         for _, header := range allowHeaders {
@@ -67,7 +67,7 @@ func MiddlewareSetClientIp(allowHeaders []string) gin.HandlerFunc {
     }
 }
 
-func MiddlewareAdapterMethodGet() gin.HandlerFunc {
+func GinMiddlewareAdapterMethodGet() gin.HandlerFunc {
     return func(c *gin.Context) {
         if c.Request.Method == http.MethodGet {
             if c.Query("message") == "" {
