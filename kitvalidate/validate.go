@@ -1,11 +1,12 @@
 package kitvalidate
 
 import (
-    "context"
-    "errors"
-    "fmt"
+	"context"
+	"errors"
+	"fmt"
+	"strings"
 
-    "buf.build/go/protovalidate"
+	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 )
@@ -202,10 +203,21 @@ func validate(validator protovalidate.Validator, builder ErrorDetailBuilder, msg
 			}
 		}
 
-		// 如果有 builder，使用它构建详情
-		if builder != nil && len(validationErrors) > 0 {
-			if detail, err := builder.BuildErrorDetail(validationErrors); err == nil && detail != nil {
-				connectErr.AddDetail(detail)
+		if len(validationErrors) > 0 {
+			if builder != nil {
+				if detail, err := builder.BuildErrorDetail(validationErrors); err == nil && detail != nil {
+					connectErr.AddDetail(detail)
+				}
+			} else {
+				var errMsgs []string
+				for _, e := range validationErrors {
+					if e.Field != "" {
+						errMsgs = append(errMsgs, fmt.Sprintf("%s: %s", e.Field, e.Message))
+					} else {
+						errMsgs = append(errMsgs, e.Message)
+					}
+				}
+				connectErr = connect.NewError(connect.CodeInvalidArgument, errors.New(strings.Join(errMsgs, "; ")))
 			}
 		}
 	} else {
