@@ -57,32 +57,6 @@ type Interceptor struct {
 	errorDetailBuilder ErrorDetailBuilder
 }
 
-
-
-// 使用示例:
-// 创建带有自定义 ErrorDetailBuilder 的 interceptor
-//interceptor, err := kitrpc.NewInterceptor(
-//	kitrpc.WithErrorDetailBuilder(NewValidateErrorDetailBuilder()),
-//)
-//if err != nil {
-//	// 处理错误
-//}
-// 然后在 connect handler 中使用这个 interceptor
-
-// func NewValidateErrorDetailBuilder() kitrpc.ErrorDetailBuilder {
-//	return kitrpc.ErrorDetailBuilderFunc(func(errors []kitrpc.ValidationError) (*connect.ErrorDetail, error) {
-//		fieldErr := &msgpb.ValidateMessages{
-//			Fields: make([]*msgpb.ValidateMessage, 0, len(errors)),
-//		}
-//		for _, e := range errors {
-//			fieldErr.Fields = append(fieldErr.Fields, &msgpb.ValidateMessage{
-//				Field:   e.Field,
-//				Message: e.Message,
-//			})
-//		}
-//		return connect.NewErrorDetail(fieldErr)
-//	})
-// }
 func NewInterceptor(opts ...Option) (*Interceptor, error) {
 	var interceptor Interceptor
 	for _, opt := range opts {
