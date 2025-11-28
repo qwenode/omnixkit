@@ -33,8 +33,13 @@ func GinMiddlewareJwtAuth[T jwt.Claims]() gin.HandlerFunc {
 // 示例:
 //
 //	claims := kitctx.GetClaims[*types.JwtAdminClaims](c)
-func GetClaims[T jwt.Claims](c context.Context) (T, error) {
-    value := c.Value(ginJwtClaimsKey)
+func GetClaims[T jwt.Claims](c context.Context) (T, *connect.Error) {
+    ginContext, err := GetGinContext(c)
+    if err != nil {
+        var zero T
+        return zero, err
+    }
+    value, _ := ginContext.Get(ginJwtClaimsKey)
     if value == nil {
         var zero T
         return zero, NewUnauthenticatedErr(nil)

@@ -10,6 +10,7 @@ import (
     "net/url"
     "strings"
 
+    "connectrpc.com/connect"
     "github.com/gin-gonic/gin"
 )
 
@@ -25,7 +26,7 @@ func GinMiddlewareAdapterContext() gin.HandlerFunc {
 }
 
 // rpc内获取 gin.Context
-func GetGinContext(ctx context.Context) (*gin.Context, error) {
+func GetGinContext(ctx context.Context) (*gin.Context, *connect.Error) {
     g, ok := ctx.Value(ginContextKey).(*gin.Context)
     if !ok {
         return nil, NewInternal("Context Not Found")
