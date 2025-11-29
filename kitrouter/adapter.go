@@ -1,111 +1,177 @@
 package kitrouter
 
 import (
-    "net/http"
+	"net/http"
+	"sync"
 
-    "connectrpc.com/connect"
-    "github.com/gin-gonic/gin"
-    "github.com/qwenode/omnixkit/kitcodec"
+	"connectrpc.com/connect"
+	"github.com/gin-gonic/gin"
+	"github.com/qwenode/omnixkit/kitcodec"
 )
-
-type AuthType int
-
-const (
-    AuthRequired AuthType = iota
-    AuthGuest
-)
-
-type Service struct {
-    Method  string
-    Path    string
-    Handler gin.HandlerFunc
-    Auth    AuthType
-}
-
-type CustomService struct {
-    Auth   AuthType
-    Create func(route *gin.RouterGroup)
-}
 
 type CreateServiceFunc func(interceptors []connect.HandlerOption) (string, http.Handler)
 
-// RouterConfig 路由配置
-type RouterConfig struct {
-    GuestMiddlewares []gin.HandlerFunc       // 未登录中间件
-    AuthMiddlewares  []gin.HandlerFunc       // 需登录中间件
-    Interceptors     []connect.HandlerOption // connect拦截器
+// Option 函数式选项
+type Option func(*Adapter)
+
+// WithGuestMiddlewares 设置未登录中间件
+func WithGuestMiddlewares(middlewares ...gin.HandlerFunc) Option {
+	return func(a *Adapter) {
+		a.guestMiddlewares = middlewares
+	}
+}
+
+// WithAuthMiddlewares 设置需登录中间件
+func WithAuthMiddlewares(middlewares ...gin.HandlerFunc) Option {
+	return func(a *Adapter) {
+		a.authMiddlewares = middlewares
+	}
+}
+
+// WithInterceptors 设置connect拦截器
+func WithInterceptors(interceptors ...connect.HandlerOption) Option {
+	return func(a *Adapter) {
+		a.interceptors = interceptors
+	}
+}
+
+// route 统一路由结构
+type route struct {
+	method   string
+	path     string
+	handler  gin.HandlerFunc
+	isCustom bool
+	custom   func(route *gin.RouterGroup)
 }
 
 // Adapter 路由适配器
 type Adapter struct {
-    config         RouterConfig
-    services       []Service
-    customServices []CustomService
+	guestMiddlewares []gin.HandlerFunc
+	authMiddlewares  []gin.HandlerFunc
+	interceptors     []connect.HandlerOption
+	guestRoutes      []route
+	authRoutes       []route
 }
 
-func NewAdapter(config RouterConfig) *Adapter {
-    if config.Interceptors == nil {
-        config.Interceptors = []connect.HandlerOption{kitcodec.WithProtoJSON()}
-    }
-    return &Adapter{
-        config:         config,
-        services:       make([]Service, 0, 50),
-        customServices: make([]CustomService, 0),
-    }
+var (
+	instance *Adapter
+	once     sync.Once
+)
+
+// Bootstrap 初始化路由适配器（单例模式，只允许初始化一次）
+func Bootstrap(opts ...Option) {
+	if instance != nil {
+		panic("Router adapter already initialized")
+	}
+	once.Do(func() {
+		instance = &Adapter{
+			interceptors: []connect.HandlerOption{kitcodec.WithProtoJSON()},
+			guestRoutes:  make([]route, 0, 50),
+			authRoutes:   make([]route, 0, 50),
+		}
+		for _, opt := range opts {
+			opt(instance)
+		}
+	})
 }
 
-// POST 添加POST服务
-func (a *Adapter) POST(auth AuthType, callback CreateServiceFunc) {
-    p, h := callback(a.config.Interceptors)
-    a.services = append(a.services, Service{
-        Method:  http.MethodPost,
-        Path:    p + "*any",
-        Handler: gin.WrapH(h),
-        Auth:    auth,
-    })
+// get 获取路由适配器实例
+func get() *Adapter {
+	if instance == nil {
+		panic("Router adapter not initialized. Call Bootstrap() first.")
+	}
+	return instance
 }
 
-// GET 添加GET服务
-func (a *Adapter) GET(auth AuthType, callback CreateServiceFunc) {
-    p, h := callback(a.config.Interceptors)
-    a.services = append(a.services, Service{
-        Method:  http.MethodGet,
-        Path:    p,
-        Handler: gin.WrapH(h),
-        Auth:    auth,
-    })
+// Auth 返回需登录路由构建器
+func Auth() *RouteBuilder {
+	return &RouteBuilder{adapter: get(), isAuth: true}
 }
 
-// Custom 添加自定义路由
-func (a *Adapter) Custom(auth AuthType, callback func(route *gin.RouterGroup)) {
-    a.customServices = append(a.customServices, CustomService{
-        Auth:   auth,
-        Create: callback,
-    })
+// Guest 返回无需登录路由构建器
+func Guest() *RouteBuilder {
+	return &RouteBuilder{adapter: get(), isAuth: false}
 }
 
 // Mount 加载路由到gin引擎
-func (a *Adapter) Mount(route *gin.Engine) {
-    guestR := route.Group("", a.config.GuestMiddlewares...)
-    authR := route.Group("", a.config.AuthMiddlewares...)
-
-    for _, s := range a.services {
-        if s.Auth == AuthGuest {
-            guestR.Handle(s.Method, s.Path, s.Handler)
-        } else {
-            authR.Handle(s.Method, s.Path, s.Handler)
-        }
-    }
-    for _, s := range a.customServices {
-        if s.Auth == AuthGuest {
-            s.Create(guestR)
-        } else {
-            s.Create(authR)
-        }
-    }
+func Mount(engine *gin.Engine) {
+	get().mount(engine)
 }
 
 // Interceptors 获取拦截器配置
-func (a *Adapter) Interceptors() []connect.HandlerOption {
-    return a.config.Interceptors
+func Interceptors() []connect.HandlerOption {
+	return get().interceptors
+}
+
+// RouteBuilder 路由构建器
+type RouteBuilder struct {
+	adapter *Adapter
+	isAuth  bool
+}
+
+// POST 添加POST服务
+func (b *RouteBuilder) POST(callback CreateServiceFunc) *RouteBuilder {
+	p, h := callback(b.adapter.interceptors)
+	r := route{
+		method:  http.MethodPost,
+		path:    p + "*any",
+		handler: gin.WrapH(h),
+	}
+	if b.isAuth {
+		b.adapter.authRoutes = append(b.adapter.authRoutes, r)
+	} else {
+		b.adapter.guestRoutes = append(b.adapter.guestRoutes, r)
+	}
+	return b
+}
+
+// GET 添加GET服务
+func (b *RouteBuilder) GET(callback CreateServiceFunc) *RouteBuilder {
+	p, h := callback(b.adapter.interceptors)
+	r := route{
+		method:  http.MethodGet,
+		path:    p,
+		handler: gin.WrapH(h),
+	}
+	if b.isAuth {
+		b.adapter.authRoutes = append(b.adapter.authRoutes, r)
+	} else {
+		b.adapter.guestRoutes = append(b.adapter.guestRoutes, r)
+	}
+	return b
+}
+
+// Custom 添加自定义路由
+func (b *RouteBuilder) Custom(callback func(route *gin.RouterGroup)) *RouteBuilder {
+	r := route{
+		isCustom: true,
+		custom:   callback,
+	}
+	if b.isAuth {
+		b.adapter.authRoutes = append(b.adapter.authRoutes, r)
+	} else {
+		b.adapter.guestRoutes = append(b.adapter.guestRoutes, r)
+	}
+	return b
+}
+
+// mount 加载路由到gin引擎
+func (a *Adapter) mount(engine *gin.Engine) {
+	guestR := engine.Group("", a.guestMiddlewares...)
+	authR := engine.Group("", a.authMiddlewares...)
+
+	for _, r := range a.guestRoutes {
+		if r.isCustom {
+			r.custom(guestR)
+		} else {
+			guestR.Handle(r.method, r.path, r.handler)
+		}
+	}
+	for _, r := range a.authRoutes {
+		if r.isCustom {
+			r.custom(authR)
+		} else {
+			authR.Handle(r.method, r.path, r.handler)
+		}
+	}
 }
