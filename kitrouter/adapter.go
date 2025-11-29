@@ -54,8 +54,10 @@ type Adapter struct {
 }
 
 var (
-	instance *Adapter
-	once     sync.Once
+	instance     *Adapter
+	authBuilder  *RouteBuilder
+	guestBuilder *RouteBuilder
+	once         sync.Once
 )
 
 // Bootstrap 初始化路由适配器（单例模式，只允许初始化一次）
@@ -72,6 +74,8 @@ func Bootstrap(opts ...Option) {
 		for _, opt := range opts {
 			opt(instance)
 		}
+		authBuilder = &RouteBuilder{adapter: instance, isAuth: true}
+		guestBuilder = &RouteBuilder{adapter: instance, isAuth: false}
 	})
 }
 
@@ -85,12 +89,14 @@ func get() *Adapter {
 
 // Auth 返回需登录路由构建器
 func Auth() *RouteBuilder {
-	return &RouteBuilder{adapter: get(), isAuth: true}
+	get() // 确保已初始化
+	return authBuilder
 }
 
 // Guest 返回无需登录路由构建器
 func Guest() *RouteBuilder {
-	return &RouteBuilder{adapter: get(), isAuth: false}
+	get() // 确保已初始化
+	return guestBuilder
 }
 
 // Mount 加载路由到gin引擎
