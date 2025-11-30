@@ -47,15 +47,15 @@ func (r *Response) SetFaultMessage(msg kitfault.Fault) {
 	}
 }
 
-// 确保 Response 实现 Accessor 接口
-var _ kitfault.Accessor = (*Response)(nil)
+// 确保 Response 实现 FaultHolder 接口
+var _ kitfault.FaultHolder = (*Response)(nil)
 
 // ========== 项目初始化（启动时调用一次） ==========
 
 func init() {
-	kitfault.Bootstrap(func(halt bool, hint string) kitfault.Fault {
+	kitfault.Bootstrap(func(hint string) kitfault.Fault {
 		return &FaultMessage{
-			Halt: halt,
+			Halt: true,
 			Hint: hint,
 		}
 	})
@@ -78,13 +78,7 @@ func main() {
 
 	// 示例3: 错误传递
 	resp2 := &Response{}
-	if kitfault.Transfer(resp, resp2) {
+	if kitfault.Forward(resp, resp2) {
 		fmt.Printf("错误已传递: %s\n", resp2.GetFaultMessage().GetHint())
 	}
-
-	// 示例4: GetOrCreate
-	resp3 := &Response{}
-	fmt.Printf("resp3.FaultMessage 初始为 nil: %v\n", resp3.FaultMessage == nil)
-	kitfault.GetOrCreate(resp3)
-	fmt.Printf("调用 GetOrCreate 后: %v\n", resp3.FaultMessage != nil)
 }
