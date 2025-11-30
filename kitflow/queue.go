@@ -30,10 +30,13 @@ type QueueJob struct {
     RetryPolicy                              *temporal.RetryPolicy          `json:"retry_policy"`
 }
 
+// DefaultTaskQueue 默认任务队列名称
+var DefaultTaskQueue = "default"
+
 // Validate 校验任务配置
 func (j *QueueJob) Validate() error {
     if j.TaskQueue == "" {
-        j.TaskQueue = "default"
+        j.TaskQueue = DefaultTaskQueue
     }
     return nil
 }
