@@ -5,58 +5,62 @@ type Fault interface {
     GetHint() string
 }
 
-// FaultHolder 持有 Fault 的对象接口
-type FaultHolder interface {
-    GetFaultMessage() Fault
-    SetFaultMessage(msg Fault)
+// FaultHolder 持有 Fault 的对象接口（使用泛型支持 protobuf 生成的具体类型）
+type FaultHolder[T Fault] interface {
+    GetFaultMessage() T
+    SetFaultMessage(msg T)
 }
 
 // FaultConstructor 用于创建 Fault 实例的构造函数类型
-type FaultConstructor func(hint string) Fault
+type FaultConstructor[T Fault] func(hint string) T
 
-var constructor FaultConstructor
+var constructorAny any
 
 // Bootstrap 初始化 Fault 构造函数（启动时调用一次）
 // 示例:
 //
-//	kitfault.Bootstrap(func(hint string) kitfault.Fault {
-//	    return &msgpb.FaultMessage{Halt: true, Hint: hint}
+//	kitfault.Bootstrap(func(hint string) *msgpb.FaultMessage {
+//	    return &msgpb.FaultMessage{Hint: hint}
 //	})
-func Bootstrap(fn FaultConstructor) {
-    constructor = fn
+func Bootstrap[T Fault](fn FaultConstructor[T]) {
+    constructorAny = fn
 }
 
-func mustGetConstructor() FaultConstructor {
-    if constructor == nil {
+func getConstructor[T Fault]() FaultConstructor[T] {
+    if constructorAny == nil {
         panic("kitfault: not initialized. Call Bootstrap first.")
     }
-    return constructor
+    if fn, ok := constructorAny.(FaultConstructor[T]); ok {
+        return fn
+    }
+    panic("kitfault: constructor type mismatch")
 }
 
 // IsHalted 判断流程是否应该停止并返回
-func IsHalted(holder FaultHolder) bool {
+func IsHalted[T Fault](holder FaultHolder[T]) bool {
     if holder == nil {
         return false
     }
     fault := holder.GetFaultMessage()
-    if fault == nil {
+    // 使用 any 转换检查 nil（泛型类型的零值检查）
+    if any(fault) == nil {
         return false
     }
     return fault.GetHint() != ""
 }
 
 // Halt 停止执行后续流程并设置错误消息
-func Halt(holder FaultHolder, hint string) {
-    holder.SetFaultMessage(mustGetConstructor()(hint))
+func Halt[T Fault](holder FaultHolder[T], hint string) {
+    holder.SetFaultMessage(getConstructor[T]()(hint))
 }
 
 // Forward 判断是否有错误，如果有，将 from 的错误传递到 to
-func Forward(from FaultHolder, to FaultHolder) bool {
+func Forward[T Fault](from FaultHolder[T], to FaultHolder[T]) bool {
     if from == nil {
         return false
     }
     fault := from.GetFaultMessage()
-    if fault == nil {
+    if any(fault) == nil {
         return false
     }
     if fault.GetHint() != "" {

@@ -10,16 +10,9 @@ import (
 
 // FaultMessage 模拟 protobuf 生成的 msgpb.FaultMessage
 type FaultMessage struct {
-	Halt bool
 	Hint string
 }
 
-func (f *FaultMessage) GetHalt() bool {
-	if f == nil {
-		return false
-	}
-	return f.Halt
-}
 
 func (f *FaultMessage) GetHint() string {
 	if f == nil {
@@ -29,33 +22,25 @@ func (f *FaultMessage) GetHint() string {
 }
 
 // Response 模拟 protobuf 生成的 Response，内嵌 FaultMessage
+// 现在 GetFaultMessage 返回具体类型 *FaultMessage，与 protobuf 生成的代码一致
 type Response struct {
 	Data         string
 	FaultMessage *FaultMessage
 }
 
-func (r *Response) GetFaultMessage() kitfault.Fault {
-	if r.FaultMessage == nil {
-		return nil
-	}
+func (r *Response) GetFaultMessage() *FaultMessage {
 	return r.FaultMessage
 }
 
-func (r *Response) SetFaultMessage(msg kitfault.Fault) {
-	if fm, ok := msg.(*FaultMessage); ok {
-		r.FaultMessage = fm
-	}
+func (r *Response) SetFaultMessage(msg *FaultMessage) {
+	r.FaultMessage = msg
 }
-
-// 确保 Response 实现 FaultHolder 接口
-var _ kitfault.FaultHolder = (*Response)(nil)
 
 // ========== 项目初始化（启动时调用一次） ==========
 
 func init() {
-	kitfault.Bootstrap(func(hint string) kitfault.Fault {
+	kitfault.Bootstrap(func(hint string) *FaultMessage {
 		return &FaultMessage{
-			Halt: true,
 			Hint: hint,
 		}
 	})
