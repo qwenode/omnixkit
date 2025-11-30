@@ -39,3 +39,18 @@ func PageToOffsetLimitMax(input PageSize,maxSize int32,maxPage int32) (_offset i
     }
     return PageToOffsetLimit(input)
 }
+
+// 获取处理后的 page 和 size
+// page 从 1 开始，size 默认为 20
+// 返回值: page, size
+func GetPageSize(input PageSize) (_page int, _size int) {
+    page := int(input.GetPage())
+    size := int(input.GetSize())
+    if page < 1 {
+        page = 1
+    }
+    if size < 1 {
+        size = 20
+    }
+    return page, size
+}
