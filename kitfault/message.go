@@ -27,13 +27,7 @@ func Bootstrap[T Fault](fn FaultConstructor[T]) {
 }
 
 func getConstructor[T Fault]() FaultConstructor[T] {
-    if constructorAny == nil {
-        panic("kitfault: not initialized. Call Bootstrap first.")
-    }
-    if fn, ok := constructorAny.(FaultConstructor[T]); ok {
-        return fn
-    }
-    panic("kitfault: constructor type mismatch")
+    return constructorAny.(FaultConstructor[T])
 }
 
 // IsHalted 判断流程是否应该停止并返回
