@@ -141,18 +141,19 @@ func ConsumeQueue(flowClient client.Client, conn *rabbitmq.Conn, queue string, o
             log.Err(err).Msg("invalid job configuration")
             return rabbitmq.Ack
         }
-
+        
         startOpts := client.StartWorkflowOptions{
             ID:                                       job.Id,
             TaskQueue:                                job.TaskQueue,
-            StartDelay:                               job.StartDelay,
             WorkflowExecutionTimeout:                 job.WorkflowExecutionTimeout,
             WorkflowIDReusePolicy:                    job.WorkflowIDReusePolicy,
             WorkflowIDConflictPolicy:                 job.WorkflowIDConflictPolicy,
             WorkflowExecutionErrorWhenAlreadyStarted: job.WorkflowExecutionErrorWhenAlreadyStarted,
             RetryPolicy:                              job.GetRetryPolicy(),
         }
-
+        if job.StartDelay > 0 {
+            startOpts.StartDelay = job.StartDelay
+        }
         wf, err := flowClient.ExecuteWorkflow(ctx, startOpts, job.Name, job.Arg)
         if temporal.IsTimeoutError(err) || temporal.IsPanicError(err) {
             log.Debug().Str("ID", d.MessageId).Msg("workflow execution failed, requeuing message")
