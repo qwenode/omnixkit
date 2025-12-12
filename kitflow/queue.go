@@ -16,6 +16,8 @@ import (
 type QueueJob struct {
     // Id 工作流唯一ID
     Id string `json:"id"`
+    // ID 与日期排重, 如果设置此项,则消费进程会将当前执行时候的日期附加到工作流ID后面,格式由 IdDateFormat 指定,如 "2006-01-02"
+    IdDateFormat string `json:"id_date_format"`
     // Name 工作流名称
     Name string `json:"name"`
     // Arg 工作流参数
@@ -36,6 +38,7 @@ var DefaultTaskQueue = "default"
 // Validate 校验任务配置
 func (j *QueueJob) Validate() error {
     if j.TaskQueue == "" {
+        
         j.TaskQueue = DefaultTaskQueue
     }
     return nil
@@ -141,7 +144,9 @@ func ConsumeQueue(flowClient client.Client, conn *rabbitmq.Conn, queue string, o
             log.Err(err).Msg("invalid job configuration")
             return rabbitmq.Ack
         }
-        
+        if job.IdDateFormat != "" {
+            job.Id+="/"+time.Now().Format(job.IdDateFormat)
+        }
         startOpts := client.StartWorkflowOptions{
             ID:                                       job.Id,
             TaskQueue:                                job.TaskQueue,
