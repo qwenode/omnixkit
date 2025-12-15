@@ -30,6 +30,8 @@ type QueueJob struct {
     WorkflowIDConflictPolicy                 enums.WorkflowIdConflictPolicy `json:"conflict_policy"`
     WorkflowExecutionErrorWhenAlreadyStarted bool                           `json:"already_started"`
     RetryPolicy                              *temporal.RetryPolicy          `json:"retry_policy"`
+    // 是否异步执行,异步执行不会等待工作流完成,启动工作流后队列就会继续执行下一个任务
+    Async bool `json:"async"`
 }
 
 // DefaultTaskQueue 默认任务队列名称
@@ -38,7 +40,7 @@ var DefaultTaskQueue = "default"
 // Validate 校验任务配置
 func (j *QueueJob) Validate() error {
     if j.TaskQueue == "" {
-        
+
         j.TaskQueue = DefaultTaskQueue
     }
     return nil
@@ -145,7 +147,7 @@ func ConsumeQueue(flowClient client.Client, conn *rabbitmq.Conn, queue string, o
             return rabbitmq.Ack
         }
         if job.IdDateFormat != "" {
-            job.Id+="/"+time.Now().Format(job.IdDateFormat)
+            job.Id += "/" + time.Now().Format(job.IdDateFormat)
         }
         startOpts := client.StartWorkflowOptions{
             ID:                                       job.Id,
@@ -168,7 +170,9 @@ func ConsumeQueue(flowClient client.Client, conn *rabbitmq.Conn, queue string, o
             log.Err(err).Str("ID", d.MessageId).Msg("workflow execution failed")
             return rabbitmq.Ack
         }
-        _ = wf.Get(ctx, nil)
+        if !job.Async {
+            _ = wf.Get(ctx, nil)
+        }
         return rabbitmq.Ack
     })
 }
