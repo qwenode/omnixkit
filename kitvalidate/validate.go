@@ -157,15 +157,20 @@ func validate(validator protovalidate.Validator, builder ErrorDetailBuilder, msg
 		for _, violation := range validationErr.ToProto().Violations {
 			// 处理字段级验证错误
 			if violation.GetField() != nil && len(violation.GetField().GetElements()) > 0 {
+				// 拼接完整的字段路径，如 item.name
+				var fieldParts []string
 				for _, element := range violation.GetField().GetElements() {
-					validationErrors = append(
-						validationErrors, ValidationError{
-							Field:   element.GetFieldName(),
-							Message: violation.GetMessage(),
-						},
-					)
-					break
+					if name := element.GetFieldName(); name != "" {
+						fieldParts = append(fieldParts, name)
+					}
 				}
+				fieldPath := strings.Join(fieldParts, ".")
+				validationErrors = append(
+					validationErrors, ValidationError{
+						Field:   fieldPath,
+						Message: violation.GetMessage(),
+					},
+				)
 			} else {
 				// 处理消息级验证错误（如 CEL 表达式）
 				validationErrors = append(
