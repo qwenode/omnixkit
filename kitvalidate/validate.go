@@ -184,6 +184,15 @@ func validate(validator protovalidate.Validator, builder ErrorDetailBuilder, msg
 
 		if len(validationErrors) > 0 {
 			if builder != nil {
+				// 使用第一个字段错误作为 message
+				firstErr := validationErrors[0]
+				var errMsg string
+				if firstErr.Field != "" {
+					errMsg = fmt.Sprintf("%s: %s", firstErr.Field, firstErr.Message)
+				} else {
+					errMsg = firstErr.Message
+				}
+				connectErr = connect.NewError(connect.CodeInvalidArgument, errors.New(errMsg))
 				if detail, err := builder.BuildErrorDetail(validationErrors); err == nil && detail != nil {
 					connectErr.AddDetail(detail)
 				}
