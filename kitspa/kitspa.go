@@ -19,6 +19,10 @@ type Config struct {
 	AssetsPath string
 	// IndexFile 入口文件，默认 "index.html"
 	IndexFile string
+	// AssetsCacheControl 静态资源（AssetsPath）Cache-Control，默认 "public, max-age=31536000, immutable"
+	AssetsCacheControl string
+	// IndexCacheControl 首页/SPA 回退（index.html）Cache-Control，默认 "no-cache"
+	IndexCacheControl string
 	// BlockPrefixes 需要阻止的路径前缀，默认 ["/.", "/admin."]
 	BlockPrefixes []string
 }
@@ -35,6 +39,12 @@ func Mount(r *gin.Engine, cfg Config) error {
 	if cfg.IndexFile == "" {
 		cfg.IndexFile = "index.html"
 	}
+	if cfg.AssetsCacheControl == "" {
+		cfg.AssetsCacheControl = "public, max-age=31536000, immutable"
+	}
+	if cfg.IndexCacheControl == "" {
+		cfg.IndexCacheControl = "no-cache"
+	}
 	if cfg.BlockPrefixes == nil {
 		cfg.BlockPrefixes = []string{"/.", "/admin."}
 	}
@@ -49,44 +59,48 @@ func Mount(r *gin.Engine, cfg Config) error {
 	indexPath := cfg.DistDir + "/" + cfg.IndexFile
 
 	// 静态资源路由
-	r.GET(cfg.AssetsPath+"/*filepath", func(c *gin.Context) {
+	assetsHandler := func(c *gin.Context) {
+		if cfg.AssetsCacheControl != "" {
+			c.Writer.Header().Set("Cache-Control", cfg.AssetsCacheControl)
+		}
 		staticServer.ServeHTTP(c.Writer, c.Request)
-	})
+	}
+	r.GET(cfg.AssetsPath+"/*filepath", assetsHandler)
+	r.HEAD(cfg.AssetsPath+"/*filepath", assetsHandler)
 
 	// 首页路由
-	r.GET("/", func(c *gin.Context) {
+	indexHandler := func(c *gin.Context) {
 		file, err := cfg.FS.ReadFile(indexPath)
 		if err != nil {
 			c.Status(http.StatusInternalServerError)
 			return
 		}
-		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		c.Writer.Write(file)
-		c.Writer.Flush()
-	})
+		if cfg.IndexCacheControl != "" {
+			c.Writer.Header().Set("Cache-Control", cfg.IndexCacheControl)
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", file)
+	}
+	r.GET("/", indexHandler)
+	r.HEAD("/", indexHandler)
 
 	// SPA 路由回退
 	r.NoRoute(func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
 		path := c.Request.URL.Path
 
 		// 检查是否需要阻止
 		for _, prefix := range cfg.BlockPrefixes {
 			if strings.HasPrefix(path, prefix) {
-				c.Abort()
+				c.AbortWithStatus(http.StatusNotFound)
 				return
 			}
 		}
 
-		// 返回 index.html
-		file, err := cfg.FS.ReadFile(indexPath)
-		if err != nil {
-			c.Status(http.StatusInternalServerError)
-			return
-		}
-		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		c.Writer.Write(file)
-		c.Writer.Flush()
+		indexHandler(c)
 	})
 
 	return nil

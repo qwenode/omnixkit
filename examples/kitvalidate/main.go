@@ -83,7 +83,7 @@ func main() {
 	fmt.Println("4. 将拦截器添加到 Connect handler")
 	fmt.Println()
 	fmt.Println("Proto 文件示例 (使用 buf.build/bufbuild/protovalidate):")
-	fmt.Println(`
+	fmt.Print(`
 syntax = "proto3";
 
 import "buf/validate/validate.proto";
@@ -132,4 +132,3 @@ message CreateUserRequest {
 	fmt.Println("- Streaming Client (客户端流)")
 	fmt.Println("- Streaming Handler (服务端流)")
 }
-
